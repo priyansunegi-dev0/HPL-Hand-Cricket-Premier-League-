@@ -230,7 +230,7 @@ The app is fully responsive and works on:
 
 ## License
 
-MIT
+Non-Commercial Software License (See `LICENSE.txt` for details)
 
 ## Credits
 
