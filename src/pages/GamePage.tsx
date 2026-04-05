@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { supabase, type Room, type Score, type GameState } from '@/lib/supabase'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
+import { Trophy, CheckCircle2, RefreshCw, ListChecks } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
@@ -1000,349 +1001,422 @@ export function GamePage() {
   const myPlayerTag = room.first_batter ? (isTossWinner ? 'P1' : 'P2') : null;
   const theirPlayerTag = room.first_batter ? (isTossWinner ? 'P2' : 'P1') : null;
 
-  const myScoreLabel = (myPlayerTag ? `${myPlayerTag} | ` : '') + (isBatting ? '🏏 Your Score (Batting)' : '🎳 Your Score (Bowling)')
-  const theirScoreLabel = (theirPlayerTag ? `${theirPlayerTag} | ` : '') + (isBatting ? '🎳 Opponent (Bowling)' : '🏏 Opponent (Batting)')
-
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-4">
-      <div className="w-full max-w-2xl space-y-4">
+    <div className="flex h-svh flex-col items-center justify-start sm:justify-center bg-background p-2 sm:p-4 lg:p-3 py-2 sm:py-4 lg:py-2 relative overflow-y-auto overflow-x-hidden font-sans text-white">
+      {/* Background decoration */}
+      <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+
+      <div className="w-full max-w-2xl space-y-1.5 sm:space-y-3 lg:space-y-2 z-10 my-auto">
         {!room.player2_id && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-lg border-2 border-primary bg-primary/10 p-4 text-center"
+            className="rounded-[2rem] border-2 border-primary/30 bg-card/40 backdrop-blur-xl p-6 sm:p-8 text-center shadow-[0_0_40px_rgba(204,255,0,0.15)] overflow-hidden relative"
           >
-            <p className="text-sm text-muted-foreground mb-2">Room Code</p>
-            <p className="font-mono text-4xl font-bold mb-2">{room.room_code}</p>
-            <p className="text-sm text-muted-foreground">Waiting for opponent...</p>
+            <div className="absolute top-4 left-4 w-2 h-2 border-t-2 border-l-2 border-primary opacity-30" />
+            <div className="absolute top-4 right-4 w-2 h-2 border-t-2 border-r-2 border-primary opacity-30" />
+            <p className="text-[10px] sm:text-xs font-black text-primary/60 uppercase tracking-[0.4em] mb-4">AWAITING CHALLENGER</p>
+            <p className="font-mono text-4xl sm:text-5xl font-black mb-4 tracking-[0.2em] text-white drop-shadow-[0_0_10px_rgba(204,255,0,0.4)]">{room.room_code}</p>
+            <div className="flex items-center justify-center gap-2">
+              <Spinner className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
+              <p className="text-[10px] sm:text-sm text-muted-foreground font-bold uppercase tracking-widest">Share this code to start</p>
+            </div>
           </motion.div>
         )}
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <CardTitle>Innings {room.current_innings}</CardTitle>
-                <p className="text-sm text-muted-foreground">Ball {gameState.current_ball_number}/10</p>
+        <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-[0_0_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden">
+          <CardHeader className="border-b border-primary/10 pb-2 sm:pb-3 lg:pb-1.5 p-3 sm:p-4 lg:p-2.5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="bg-primary/10 p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-primary/20 shadow-[0_0_15px_rgba(204,255,0,0.1)]">
+                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-primary fill-primary/20" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white drop-shadow-[0_0_5px_rgba(204,255,0,0.2)]">Innings {room.current_innings}</CardTitle>
+                  <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.2em]">Ball {gameState.current_ball_number}/10</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 sm:gap-3">
                 {myPlayerTag && (
-                  <Badge variant="outline" className={`text-lg font-black px-3 py-1 ${myPlayerTag === 'P1' ? 'border-primary text-primary' : 'border-orange-500 text-orange-500'}`}>
+                  <Badge variant="outline" className={`text-[10px] sm:text-sm font-black px-2 sm:px-4 py-1 rounded-full border-2 tracking-widest uppercase ${myPlayerTag === 'P1' ? 'border-primary text-primary shadow-[0_0_10px_rgba(204,255,0,0.2)]' : 'border-primary/40 text-primary/60 shadow-[0_0_10px_rgba(204,255,0,0.1)]'}`}>
                     {myPlayerTag}
                   </Badge>
                 )}
-                <Button variant="destructive" size="sm" onClick={endGame}>End Game</Button>
+                <Button variant="ghost" size="sm" onClick={endGame} className="text-destructive/60 hover:text-destructive hover:bg-destructive/10 font-bold uppercase tracking-widest text-[8px] sm:text-[10px] h-8 px-2">Exit</Button>
               </div>
             </div>
 
 
             {room.player2_id && gameStarted && (
-              <div className={`text-center p-4 rounded-lg font-bold text-3xl transition-colors ${
-                remainingTime <= 3 ? 'bg-red-500/20 text-red-600' : 'bg-blue-500/20 text-blue-600'
+              <div className={`text-center p-3 sm:p-4 rounded-xl sm:rounded-2xl font-black text-3xl sm:text-4xl tracking-widest transition-all duration-300 shadow-inner overflow-hidden relative group ${
+                remainingTime <= 3 ? 'bg-destructive/10 text-destructive border border-destructive/20' : 'bg-primary/5 text-primary border border-primary/10'
               }`}>
-                ⏱️ {remainingTime}s
+                {/* Glow effect */}
+                <div className={`absolute inset-0 opacity-20 blur-xl group-hover:opacity-40 transition-opacity ${remainingTime <= 3 ? 'bg-destructive' : 'bg-primary'}`} />
+                <span className="relative z-10 drop-shadow-[0_0_10px_currentColor]">
+                  {remainingTime < 10 ? `0${remainingTime}` : remainingTime}s
+                </span>
+                <div className="absolute bottom-0 left-0 h-1 bg-current transition-all duration-100 ease-linear shadow-[0_0_10px_currentColor]" style={{ width: `${(remainingTime / 13) * 100}%` }} />
               </div>
             )}
+            
             {room.player2_id && gameStarted && (
-              <div className="mt-3 p-2 text-center text-sm">
+              <div className="mt-2 sm:mt-3 p-1.5 sm:p-2 text-center rounded-lg sm:rounded-xl bg-white/[0.02] border border-white/5">
                 {selectedNumber ? (
-                  <p className="text-green-600 font-semibold">✓ You chose: {selectedNumber}</p>
+                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
+                    <p className="text-primary font-black uppercase tracking-widest text-[10px] sm:text-xs">Locked: {selectedNumber}</p>
+                  </motion.div>
                 ) : (
-                  <p className="text-orange-600 font-semibold">⏳ Pick a number (1-6)</p>
+                  <p className="text-primary/60 font-black uppercase tracking-[0.2em] text-[10px] sm:text-xs animate-pulse">Pick a move (1-6)</p>
                 )}
-                {selectedNumber && !opponentReady && (
-                  <p className="text-muted-foreground mt-1">Waiting for opponent...</p>
-                )}
-                {opponentReady && (
-                  <p className="text-green-600 font-semibold mt-1">✓ Opponent ready!</p>
-                )}
+                <div className="flex items-center justify-center gap-3 sm:gap-4 mt-1 sm:mt-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${selectedNumber ? 'bg-primary' : 'bg-gray-700'} transition-colors`} />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest">You</span>
+                  </div>
+                  <div className="w-2 sm:w-4 border-t border-white/5" />
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${opponentReady ? 'bg-primary' : 'bg-gray-700'} transition-colors`} />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest">Opponent</span>
+                  </div>
+                </div>
               </div>
             )}
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4 lg:space-y-2.5 pt-4 sm:pt-4 lg:pt-2 p-4 sm:p-4 lg:p-3">
             {!room.player2_id ? (
-              <div className="flex flex-col items-center justify-center py-8 gap-4">
-                <p className="text-muted-foreground">Waiting for opponent to join...</p>
+              <div className="flex flex-col items-center justify-center py-10 sm:py-12 gap-4 sm:gap-6">
+                <Spinner className="w-10 h-10 sm:w-12 sm:h-12 text-primary/40" />
+                <p className="text-muted-foreground font-black uppercase tracking-widest text-[10px] sm:text-xs">Matching with player...</p>
                 <Button
+                  variant="outline"
                   onClick={handleManualRefresh}
                   disabled={isRefreshing}
-                  className="gap-2"
+                  className="gap-2 border-primary/20 hover:bg-primary/10 h-10 sm:h-12 px-6 sm:px-8 rounded-full transition-all"
                 >
-                  {isRefreshing ? (
-                    <>
-                      <Spinner className="size-4" />
-                      Refreshing...
-                    </>
-                  ) : (
-                    <>🔄 Refresh</>
-                  )}
+                  {isRefreshing ? <Spinner className="w-3 h-3 sm:w-4 sm:h-4" /> : <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" />}
+                  <span className="font-black uppercase tracking-widest text-[10px] sm:text-xs">Refresh</span>
                 </Button>
-                <p className="text-xs text-muted-foreground">Auto-refreshing every second...</p>
               </div>
             ) : startCountdown !== null ? (
-              <div className="flex items-center justify-center py-16">
+              <div className="flex items-center justify-center py-16 sm:py-20">
                 <motion.div
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 1.5, opacity: 0 }}
+                  exit={{ scale: 2, opacity: 0 }}
                   key={startCountdown}
-                  className="text-center"
+                  className="text-center relative"
                 >
-                  <div className="text-9xl font-black text-primary drop-shadow-lg">
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-0 -m-12 sm:-m-20 border border-dashed border-primary/20 rounded-full"
+                  />
+                  <div className="text-[6rem] sm:text-[10rem] font-black text-primary leading-none italic drop-shadow-[0_0_50px_rgba(204,255,0,0.5)]">
                     {startCountdown}
                   </div>
-                  <p className="text-lg text-muted-foreground mt-4">Game Starting...</p>
+                  <p className="text-base sm:text-xl font-black text-white uppercase tracking-[0.4em] mt-6 sm:mt-8 italic">Prepare to Play</p>
                 </motion.div>
               </div>
             ) : isTossActive && !room?.first_batter ? (
-              <div className="flex flex-col items-center justify-center py-10 space-y-8 animate-in fade-in zoom-in duration-300">
+              <div className="flex flex-col items-center justify-center py-8 sm:py-10 space-y-8 sm:space-y-10 animate-in fade-in zoom-in duration-500">
                 <div className="text-center">
-                  <h2 className="text-3xl font-black text-primary uppercase tracking-wider mb-2">Toss Time!</h2>
-                  <p className="text-muted-foreground text-lg font-medium">Tap <span className="text-emerald-500 font-bold">HEADS</span> first to Bat first!</p>
+                  <div className="inline-block px-3 py-1 sm:px-4 sm:py-1.5 bg-primary/20 border border-primary/30 rounded-full mb-3 sm:mb-4">
+                    <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.3em]">DECIDE ROLES</p>
+                  </div>
+                  <h2 className="text-4xl sm:text-5xl font-black text-white italic uppercase tracking-tight mb-2 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">THE TOSS</h2>
+                  <p className="text-gray-400 font-bold tracking-widest uppercase text-[10px] sm:text-xs">Tap <span className="text-primary font-black">HEADS</span> first to claim Batting!</p>
                 </div>
-                <div className={`flex flex-col gap-6 w-full max-w-[200px] ${headsPos === 'top' ? '' : 'flex-col-reverse'}`}>
+                <div className={`flex flex-col gap-6 sm:gap-8 w-full max-w-[180px] sm:max-w-[220px] ${headsPos === 'top' ? '' : 'flex-col-reverse'} transition-all duration-300`}>
                   <Button 
                     size="lg" 
-                    className="h-28 text-3xl font-black bg-emerald-500 hover:bg-emerald-600 shadow-xl transition-all hover:scale-105 active:scale-95 border-b-4 border-emerald-700" 
+                    className="h-24 sm:h-32 text-3xl sm:text-4xl font-black bg-primary hover:bg-[#b8e600] text-black shadow-[0_15px_40px_-5px_rgba(204,255,0,0.3)] transition-all hover:scale-105 active:scale-95 border-b-4 sm:border-b-8 border-black/20 rounded-[1.5rem] sm:rounded-[2rem] italic tracking-tighter" 
                     onClick={() => handleTossClick('heads')}
                   >
                     HEADS
                   </Button>
                   <Button 
                     size="lg" 
-                    className="h-28 text-3xl font-black bg-rose-500 hover:bg-rose-600 shadow-xl transition-all hover:scale-105 active:scale-95 border-b-4 border-rose-700" 
+                    className="h-24 sm:h-32 text-3xl sm:text-4xl font-black bg-white/5 hover:bg-white/10 text-white shadow-xl transition-all hover:scale-105 active:scale-95 border-b-4 sm:border-b-8 border-black/40 rounded-[1.5rem] sm:rounded-[2rem] italic tracking-tighter filter grayscale opacity-40 cursor-not-allowed group" 
                     onClick={() => handleTossClick('tails')}
                   >
                     TAILS
+                    <span className="absolute -right-4 -top-8 bg-black text-white text-[8px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">Only Heads wins!</span>
                   </Button>
                 </div>
               </div>
             ) : (
-              <>
-                <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="flex flex-col gap-4 sm:gap-6 lg:gap-3 xl:gap-2.5">
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:gap-3 text-center items-stretch order-1">
                   <motion.div
                     key={`score-${myScore}-${room.current_innings}-${isBatting}`}
                     initial={{ scale: 0.9, opacity: 0.5 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className={`p-3 rounded-lg border-2 ${
+                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 transition-all duration-500 shadow-xl relative overflow-hidden flex flex-col justify-center ${
                       isBatting
-                        ? 'bg-green-500/10 border-green-500/30'
-                        : 'bg-blue-500/10 border-blue-500/20'
+                        ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(204,255,0,0.1)] mb-2 sm:mb-4 lg:mb-1 lg:mt-[-4px]'
+                        : 'bg-primary/5 border-primary/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]'
                     }`}
                   >
-                    <p className="text-xs text-muted-foreground font-semibold leading-tight">{myScoreLabel}</p>
-                    <p className={`text-4xl font-black ${isBatting ? 'text-green-600' : 'text-blue-600'}`}>{myScore}</p>
+                    {isBatting && <div className="absolute top-0 right-0 w-6 h-6 sm:w-8 sm:h-8 bg-primary rounded-bl-lg flex items-center justify-center opacity-80"><span className="text-[8px] sm:text-[10px] text-black font-black">★</span></div>}
+                    <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest mb-1 ${isBatting ? 'text-primary' : 'text-primary/40'}`}>{myPlayerTag} {isBatting ? 'Batting' : 'Bowling'}</p>
+                    <p className={`text-2xl sm:text-4xl font-black tabular-nums transition-all ${isBatting ? 'text-white' : 'text-gray-400'}`}>{myScore}</p>
                   </motion.div>
-                  <div className="p-3 rounded-lg bg-muted border-2 border-muted-foreground/20 flex flex-col items-center justify-center">
-                    <p className="text-sm text-muted-foreground font-semibold">Ball</p>
-                    <p className="text-3xl font-bold">{gameState.current_ball_number}<span className="text-base font-normal text-muted-foreground">/10</span></p>
-                    <p className="text-xs text-muted-foreground">{10 - gameState.current_ball_number} left</p>
+
+                  <div className="p-2 sm:p-4 rounded-2xl sm:rounded-3xl bg-white/[0.03] border-2 border-white/5 flex flex-col items-center justify-center relative group">
+                    <p className="text-[8px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Ball</p>
+                    <div className="flex items-center gap-0.5 sm:gap-1">
+                      <p className="text-xl sm:text-3xl font-black italic">{gameState.current_ball_number}</p>
+                      <span className="text-gray-600 font-bold mt-1 sm:mt-2 text-xs sm:text-sm">/10</span>
+                    </div>
+                    <div className="w-4 sm:w-8 h-0.5 bg-primary/20 mt-1 sm:mt-2 rounded-full" />
                   </div>
+
                   <motion.div
                     key={`opponent-${theirScore}-${room.current_innings}-${isBatting}`}
                     initial={{ scale: 0.9, opacity: 0.5 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className={`p-3 rounded-lg border-2 ${
-                      isBatting
-                        ? 'bg-blue-500/10 border-blue-500/20'
-                        : 'bg-green-500/10 border-green-500/30'
+                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 transition-all duration-500 shadow-xl relative overflow-hidden flex flex-col justify-center ${
+                      !isBatting
+                        ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(204,255,0,0.1)] mb-2 sm:mb-4 lg:mb-1 lg:mt-[-4px]'
+                        : 'bg-primary/10 border-primary/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]'
                     }`}
                   >
-                    <p className="text-xs text-muted-foreground font-semibold leading-tight">{theirScoreLabel}</p>
-                    <p className={`text-4xl font-black ${isBatting ? 'text-blue-600' : 'text-green-600'}`}>{theirScore}</p>
+                    {!isBatting && <div className="absolute top-0 right-0 w-6 h-6 sm:w-8 sm:h-8 bg-primary rounded-bl-lg flex items-center justify-center opacity-80"><span className="text-[8px] sm:text-[10px] text-black font-black">★</span></div>}
+                    <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest mb-1 ${!isBatting ? 'text-primary' : 'text-primary/40'}`}>{theirPlayerTag} {!isBatting ? 'Batting' : 'Bowling'}</p>
+                    <p className={`text-2xl sm:text-4xl font-black tabular-nums transition-all ${!isBatting ? 'text-white' : 'text-gray-400'}`}>{theirScore}</p>
                   </motion.div>
                 </div>
 
                 {/* Innings 2 Target Banner */}
                 {room.current_innings === 2 && (
-                  <div className="text-center p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                    <p className="text-xs text-muted-foreground">Innings 2 — Target</p>
-                    {/* Target = innings-1 batter's score + 1 (batter in inn1 = first_batter) */}
+                  <motion.div 
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="text-center p-3 sm:p-4 lg:p-2.5 rounded-2xl sm:rounded-3xl bg-primary/10 border-2 border-primary/40 shadow-[0_10px_30px_-5px_rgba(204,255,0,0.1)] order-2"
+                  >
                     {(() => {
                       const inn1BatterScore = room.first_batter === room.player1_id ? score.player1_score : score.player2_score
                       const inn2BatterScore = room.first_batter === room.player1_id ? score.player2_score : score.player1_score
                       const target = inn1BatterScore + 1
+                      const needed = Math.max(0, target - inn2BatterScore)
                       return (
                         <>
-                          <p className="text-xl font-bold text-yellow-600">{target}</p>
-                          <p className="text-xs text-muted-foreground">
-                            P2 (toss loser) needs {Math.max(0, target - inn2BatterScore)} more runs
+                          <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
+                            <span className="text-[8px] sm:text-[10px] font-black text-primary/60 uppercase tracking-[0.3em]">CHASE TARGET</span>
+                            <div className="h-0.5 w-8 sm:w-12 bg-primary/30 rounded-full" />
+                            <span className="text-xl sm:text-2xl font-black italic">{target}</span>
+                          </div>
+                          <p className="text-[10px] sm:text-sm font-bold text-white uppercase tracking-wider">
+                            Needed: <span className="text-primary font-black drop-shadow-[0_0_8px_#ccff00] text-sm sm:text-lg px-2">{needed}</span> more in {11 - gameState.current_ball_number} balls
                           </p>
                         </>
                       )
                     })()}
-                  </div>
+                  </motion.div>
                 )}
 
-                {/* Ball Result Feed */}
-                {ballMessages.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-2 rounded-lg bg-muted/50 border border-muted-foreground/20 overflow-hidden"
-                  >
-                    <p className="text-xs font-bold text-muted-foreground px-3 pt-2 pb-1 uppercase tracking-wider">📋 Ball-by-Ball</p>
-                    <div className="max-h-40 overflow-y-auto space-y-1 px-2 pb-2">
-                      {ballMessages.map((msg, idx) => {
+                {/* Selection Area (Above Feed on mobile) */}
+                <div className="border-t border-primary/10 pt-3 sm:pt-4 lg:pt-2 order-3 min-h-[160px] sm:min-h-[200px] lg:min-h-[180px] flex flex-col justify-center">
+                  <AnimatePresence mode="wait">
+                      {gameState.ball_result ? (
+                        <motion.div
+                          key="result"
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 1.1, opacity: 0 }}
+                          className="rounded-[1.2rem] sm:rounded-[1.5rem] border-2 border-primary/40 bg-primary/10 p-4 sm:p-6 text-center shadow-[0_0_30px_rgba(204,255,0,0.1)] backdrop-blur-md relative overflow-hidden"
+                        >
+                          <div className="absolute inset-0 bg-primary/5 blur-3xl rounded-full" />
+                          <p className="text-xl sm:text-3xl font-black italic uppercase tracking-tighter text-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.5)] relative z-10">{gameState.ball_result}</p>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="controls"
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.9, opacity: 0 }}
+                          className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-4 lg:gap-3 max-w-sm sm:max-w-md mx-auto place-items-center"
+                        >
+                          {[1, 2, 3, 4, 5, 6].map((num) => (
+                            <button
+                              key={num}
+                              onClick={() => submitChoice(num)}
+                              disabled={selectedNumber !== null || isProcessing}
+                              className={`group relative transition-all duration-300 flex items-center justify-center bg-transparent focus:outline-none ${
+                                selectedNumber === num 
+                                  ? 'scale-125 z-10' 
+                                  : 'hover:scale-110'
+                              } ${
+                                (selectedNumber !== null && selectedNumber !== num) || isProcessing 
+                                  ? 'opacity-30 grayscale-[0.8] cursor-not-allowed scale-90' 
+                                  : 'cursor-pointer active:scale-95'
+                              }`}
+                            >
+                              <div className={`absolute inset-0 rounded-full blur-xl transition-all duration-300 ${
+                                selectedNumber === num 
+                                  ? 'bg-primary/30 scale-125' 
+                                  : 'bg-primary/0 group-hover:bg-primary/20 scale-110'
+                              }`} />
+                              
+                              <img 
+                                src={`/RUNS/${num}.webp`} 
+                                alt={`Run ${num}`}
+                                className={`w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain pointer-events-none transition-all duration-300 filter ${
+                                  selectedNumber === num 
+                                    ? 'drop-shadow-[0_0_20px_#ccff00] brightness-125' 
+                                    : 'drop-shadow-[0_0_5px_rgba(255,255,255,0.1)] group-hover:brightness-110'
+                                }`}
+                                draggable={false}
+                              />
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                </div>
+
+                {/* History Feed (Updated to show only LATEST ball) */}
+                <div className="order-4 mt-2 sm:mt-3 lg:mt-1 lg:mb-[-4px]">
+                  {ballMessages.length > 0 && (
+                    <div className="rounded-[1rem] bg-white/[0.03] border border-white/10 p-2 sm:p-3 lg:p-2 overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <ListChecks className="w-3 h-3 text-primary" />
+                          <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.3em]">Live Feed</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                          <span className="text-[7px] sm:text-[9px] font-bold text-primary/60 uppercase">Last Delivery</span>
+                        </div>
+                      </div>
+                      
+                      {(() => {
+                        const msg = ballMessages[ballMessages.length - 1]
                         const isOut = msg.result.includes('OUT')
                         const isDot = msg.result.includes('DOT')
                         return (
                           <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, x: -10 }}
+                            key={ballMessages.length}
+                            initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className={`text-xs p-2 rounded border ${
+                            className={`p-2 sm:p-3 rounded-lg sm:rounded-xl border transition-all ${
                               isOut
-                                ? 'bg-red-500/10 border-red-500/20'
+                                ? 'bg-destructive/10 border-destructive/30 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
                                 : isDot
-                                ? 'bg-muted border-muted-foreground/10'
-                                : 'bg-green-500/10 border-green-500/20'
+                                ? 'bg-white/5 border-white/10'
+                                : 'bg-primary/10 border-primary/30 shadow-[0_0_15px_rgba(204,255,0,0.1)]'
                             }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-muted-foreground">Inn{msg.innings} B{msg.ball}</span>
-                              <span className={`font-bold ${
-                                isOut ? 'text-red-600' : isDot ? 'text-muted-foreground' : 'text-green-600'
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[7px] sm:text-[9px] font-black bg-black/40 px-1.5 py-0.5 rounded-full text-white/50 uppercase italic">Innings {msg.innings}</span>
+                                <span className="text-[7px] sm:text-[9px] font-black bg-black/40 px-1.5 py-0.5 rounded-full text-white/50 uppercase italic">Ball {msg.ball}</span>
+                              </div>
+                              <span className={`text-xs sm:text-sm font-black italic tracking-tighter uppercase ${
+                                isOut ? 'text-destructive drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]' : isDot ? 'text-white/30' : 'text-primary drop-shadow-[0_0_10px_rgba(204,255,0,0.3)]'
                               }`}>
                                 {msg.result}
                               </span>
                             </div>
-                            {(msg.p1_choice || msg.p2_choice) && (
-                              <div className="flex gap-3 mt-1 text-muted-foreground">
-                                <span>P1 chose: <strong>{msg.p1_choice ?? '?'}</strong></span>
-                                <span>P2 chose: <strong>{msg.p2_choice ?? '?'}</strong></span>
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                              <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg border border-white/5">
+                                <span className="text-[7px] sm:text-[8px] font-bold text-gray-500 uppercase tracking-widest">You</span>
+                                <span className="text-[10px] sm:text-xs font-black text-white">{myPlayerTag === 'P1' ? (msg.p1_choice ?? '-') : (msg.p2_choice ?? '-')}</span>
                               </div>
-                            )}
-                            <div className="flex justify-between mt-1 text-muted-foreground">
-                              <span>P1 total: <strong>{msg.p1_score}</strong></span>
-                              <span>P2 total: <strong>{msg.p2_score}</strong></span>
+                              <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg border border-white/5">
+                                <span className="text-[7px] sm:text-[8px] font-bold text-gray-500 uppercase tracking-widest">Opponent</span>
+                                <span className="text-[10px] sm:text-xs font-black text-white">{myPlayerTag === 'P1' ? (msg.p2_choice ?? '-') : (msg.p1_choice ?? '-')}</span>
+                              </div>
                             </div>
                           </motion.div>
                         )
-                      })}
-                      <div ref={messagesEndRef} />
+                      })()}
                     </div>
-                  </motion.div>
-                )}
-
-                {gameState.ball_result && (
-                  <motion.div
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="rounded-lg border-2 bg-muted p-6 text-center"
-                  >
-                    <p className="text-2xl font-bold">{gameState.ball_result}</p>
-                  </motion.div>
-                )}
-
-                {!gameState.ball_result && (
-                  <div className="grid grid-cols-3 gap-4 sm:gap-6 md:gap-8 max-w-md mx-auto place-items-center">
-                    {[1, 2, 3, 4, 5, 6].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => submitChoice(num)}
-                        disabled={selectedNumber !== null || isProcessing}
-                        className={`relative transition-all duration-300 flex items-center justify-center bg-transparent focus:outline-none rounded-full ${
-                          selectedNumber === num 
-                            ? 'scale-125 z-10 drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]' 
-                            : 'hover:scale-110 drop-shadow-md hover:drop-shadow-xl'
-                        } ${
-                          (selectedNumber !== null && selectedNumber !== num) || isProcessing 
-                            ? 'opacity-40 grayscale cursor-not-allowed scale-90' 
-                            : 'cursor-pointer active:scale-95'
-                        }`}
-                      >
-                        <img 
-                          src={`/RUNS/${num}.webp`} 
-                          alt={`Run ${num}`}
-                          className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain pointer-events-none drop-shadow-sm"
-                          draggable={false}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
+                  )}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
 
         {/* RESULT MODAL */}
         <Dialog open={showResultModal} onOpenChange={setShowResultModal}>
-          <DialogContent className="max-w-md" aria-describedby={undefined}>
-            <DialogTitle className="text-center text-2xl font-bold">
-              🏆 Match Complete!
-            </DialogTitle>
+          <DialogContent className="max-w-[90vw] sm:max-w-md bg-zinc-950/95 border-primary/30 backdrop-blur-2xl rounded-3xl p-0 overflow-hidden shadow-[0_0_80px_-20px_rgba(204,255,0,0.3)] [&>button]:top-6 [&>button]:right-6" aria-describedby={undefined}>
+            <div className="p-6 sm:p-8 pb-3 sm:pb-4">
+              <DialogTitle className="text-center text-3xl sm:text-4xl font-black italic uppercase tracking-tight text-white mb-2 underline decoration-primary decoration-4 underline-offset-8">
+                Match Result
+              </DialogTitle>
+            </div>
+            
             {matchResult && (
               <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="space-y-6"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="p-6 sm:p-8 pt-2 sm:pt-4 space-y-6 sm:space-y-8"
               >
-                <div className="text-center">
-                  <p className="text-muted-foreground mb-2">Winner</p>
-                  {/* winner is 'player1'/'player2' by room order; map to toss-based P1/P2 tags */}
+                <div className="relative py-8 sm:py-10 px-4 sm:px-6 rounded-3xl bg-primary/10 border-2 border-primary/30 text-center overflow-hidden">
+                  <div className="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] bg-primary/5 blur-[80px] rounded-full" />
+                  <p className="text-[8px] sm:text-[10px] font-black text-primary/60 uppercase tracking-[0.5em] mb-3 sm:mb-4 relative z-10">THE CHAMPION</p>
                   {(() => {
                     const isTossWinnerRoomP1 = room.first_batter === room.player1_id
                     const winnerIsTossWinner =
                       (matchResult.winner === 'player1' && isTossWinnerRoomP1) ||
                       (matchResult.winner === 'player2' && !isTossWinnerRoomP1)
                     return (
-                      <p className="text-3xl font-bold text-green-600">
-                        {winnerIsTossWinner ? 'P1 (Toss Winner)' : 'P2 (Toss Loser)'}
-                      </p>
+                      <div className="relative z-10">
+                        <p className="text-4xl sm:text-5xl font-black text-white italic uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] mb-2">
+                          {winnerIsTossWinner ? 'P1' : 'P2'} WINS!
+                        </p>
+                        <p className="text-primary/80 font-black uppercase tracking-[0.2em] text-[8px] sm:text-[10px]">
+                          {winnerIsTossWinner ? 'TOSS WINNER DOMINATED' : 'TOSS LOSER CHASED IT'}
+                        </p>
+                      </div>
                     )
                   })()}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Show scores under toss-based P1/P2 labels */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   {(() => {
                     const isTossWinnerRoomP1 = room.first_batter === room.player1_id
                     const p1TagScore = isTossWinnerRoomP1 ? matchResult.player1Score : matchResult.player2Score
                     const p2TagScore = isTossWinnerRoomP1 ? matchResult.player2Score : matchResult.player1Score
                     return (
                       <>
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                          <p className="text-sm text-muted-foreground mb-1">P1 (Toss Winner)</p>
-                          <p className="text-2xl font-bold">{p1TagScore}</p>
+                        <div className="text-center p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 w-2 h-2 bg-primary/40 rounded-bl-lg" />
+                          <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 shadow-[1px_1px_1px_rgba(255,255,0,0.1)]">P1 | WINNER</p>
+                          <p className="text-2xl sm:text-4xl font-black tabular-nums text-white group-hover:text-primary transition-colors">{p1TagScore}</p>
                         </div>
-                        <div className="text-center p-4 rounded-lg bg-muted">
-                          <p className="text-sm text-muted-foreground mb-1">P2 (Toss Loser)</p>
-                          <p className="text-2xl font-bold">{p2TagScore}</p>
+                        <div className="text-center p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 w-2 h-2 bg-primary/40 rounded-bl-lg" />
+                          <p className="text-[7px] sm:text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">P2 | LOSER</p>
+                          <p className="text-2xl sm:text-4xl font-black tabular-nums text-white group-hover:text-primary/60 transition-colors">{p2TagScore}</p>
                         </div>
                       </>
                     )
                   })()}
                 </div>
 
-                <div className="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <p className="text-xs text-muted-foreground">Target (P1 Toss-Winner Score + 1)</p>
-                  <p className="text-xl font-bold text-blue-600">{matchResult.targetScore}</p>
+                <div className="text-center p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between px-6 sm:px-8">
+                  <p className="text-[8px] sm:text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">TARGET WAS</p>
+                  <p className="text-2xl sm:text-3xl font-black italic text-primary drop-shadow-[0_0_10px_#ccff00]">{matchResult.targetScore}</p>
                 </div>
 
-                <p className="text-center text-sm text-muted-foreground">
-                  {(() => {
-                    const isTossWinnerRoomP1 = room.first_batter === room.player1_id
-                    const winnerIsTossWinner =
-                      (matchResult.winner === 'player1' && isTossWinnerRoomP1) ||
-                      (matchResult.winner === 'player2' && !isTossWinnerRoomP1)
-                    return winnerIsTossWinner
-                      ? `P2 (Toss Loser) couldn't reach target of ${matchResult.targetScore}`
-                      : `P2 (Toss Loser) successfully chased ${matchResult.targetScore}`
-                  })()}
-                </p>
-
-                <Button
-                  onClick={() => {
-                    toast.success('Game completed!')
-                    navigate(`/result/${roomId}`)
-                  }}
-                  className="w-full"
-                >
-                  View Full Result
-                </Button>
+                <div className="pt-2 sm:pt-4">
+                  <Button
+                    onClick={() => {
+                      toast.success('Check out the full scorecard!')
+                      navigate(`/result/${roomId}`)
+                    }}
+                    className="w-full h-14 sm:h-16 rounded-2xl sm:rounded-3xl bg-primary text-black font-black text-sm sm:text-base uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_10px_20px_-5px_rgba(204,255,0,0.3)] hover:shadow-[0_15px_30px_-5px_rgba(204,255,0,0.4)]"
+                  >
+                    VIEW FULL SCORECARD
+                  </Button>
+                </div>
               </motion.div>
             )}
           </DialogContent>

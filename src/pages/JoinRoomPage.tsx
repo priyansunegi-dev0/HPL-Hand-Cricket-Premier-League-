@@ -107,58 +107,70 @@ export function JoinRoomPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-4">
+    <div className="flex min-h-svh items-center justify-center bg-background p-4 relative overflow-hidden font-sans text-white">
+      {/* Background decoration */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
+        className="w-full max-w-md z-10"
       >
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle>Join Room</CardTitle>
-            <CardDescription>
+        <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-[0_0_50px_-12px_rgba(204,255,0,0.15)] overflow-hidden">
+          <CardHeader className="text-center pb-8 border-b border-primary/10">
+            <div className="mx-auto mb-4 bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center border border-primary/20 overflow-hidden">
+              <img src="/mobile.webp" alt="HPL Logo" className="w-full h-full object-cover" />
+            </div>
+            <CardTitle className="text-3xl font-black tracking-tight uppercase italic drop-shadow-[0_0_10px_rgba(204,255,0,0.3)]">
+              Join Room
+            </CardTitle>
+            <CardDescription className="text-muted-foreground font-medium">
               Enter the 6-digit room code from your opponent
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div>
+          <CardContent className="flex flex-col gap-6 pt-8">
+            <div className="space-y-2">
               <Input
                 type="text"
-                placeholder="Enter room code"
+                placeholder="0 0 0 0 0 0"
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 maxLength={6}
-                className="text-center font-mono text-2xl tracking-wider"
+                className="text-center font-black text-4xl py-8 tracking-[0.5em] bg-primary/5 border-primary/20 focus-visible:ring-primary focus-visible:border-primary shadow-inner text-primary placeholder:text-primary/10 uppercase transition-all duration-300 h-20"
                 disabled={loading}
               />
             </div>
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Button
-                size="lg"
-                onClick={joinRoom}
-                disabled={loading || roomCode.length !== 6 || !playerId}
-                className="w-full"
+            <div className="flex flex-col gap-3 pt-2">
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
-                {loading ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Joining...
-                  </>
-                ) : (
-                  'Join Room'
-                )}
+                <Button
+                  size="lg"
+                  onClick={joinRoom}
+                  disabled={loading || roomCode.length !== 6 || !playerId}
+                  className="w-full h-14 text-base font-black tracking-widest uppercase shadow-[0_0_20px_rgba(204,255,0,0.25)] hover:shadow-[0_0_30px_rgba(204,255,0,0.4)] transition-all cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <Spinner className="mr-2" />
+                      JOINING...
+                    </>
+                  ) : (
+                    'ENTER MATCH'
+                  )}
+                </Button>
+              </motion.div>
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/')}
+                disabled={loading}
+                className="w-full h-12 text-sm font-bold tracking-widest uppercase text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                BACK TO LOBBY
               </Button>
-            </motion.div>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/')}
-              disabled={loading}
-            >
-              Back to Home
-            </Button>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
