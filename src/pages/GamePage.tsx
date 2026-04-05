@@ -711,7 +711,19 @@ export function GamePage() {
       // Hold the result on screen for 1.5s for BOTH players before generating new ball
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      if (isLastBall) {
+      let targetReached = false
+      if (currentInnings === 2) {
+        const isPlayer1FirstBatterTemp = currentRoom.first_batter === currentRoom.player1_id
+        const inn1Score = isPlayer1FirstBatterTemp ? updatedScore.player1_score : updatedScore.player2_score
+        const inn2Score = isPlayer1FirstBatterTemp ? updatedScore.player2_score : updatedScore.player1_score
+        if (inn2Score > inn1Score) {
+          targetReached = true
+        }
+      }
+
+      const isEndConditionMet = isLastBall || targetReached
+
+      if (isEndConditionMet) {
         if (currentInnings === 1) {
           const { data: serverTime } = await supabase.rpc('get_server_timestamp')
           const ballStartTime = serverTime || new Date().toISOString()
@@ -767,7 +779,7 @@ export function GamePage() {
       }
 
       // Optimistically update local state for P1
-      if (isLastBall && currentInnings === 1) {
+      if (isEndConditionMet && currentInnings === 1) {
         setRoom(prev => prev ? { ...prev, current_innings: 2 } : null)
         setGameState(prev => prev ? {
           ...prev,
@@ -776,7 +788,7 @@ export function GamePage() {
           player1_choice: null,
           player2_choice: null
         } : null)
-      } else if (!isLastBall) {
+      } else if (!isEndConditionMet) {
         setGameState(prev => prev ? {
           ...prev,
           current_ball_number: currentBallNum + 1,
