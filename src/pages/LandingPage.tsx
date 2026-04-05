@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, BookOpen, Home as HomeIcon, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export const LandingPage = () => {
   const [view, setView] = useState<'home' | 'rules' | 'social'>('home')
+  const navigate = useNavigate()
 
   const containerVariants = {
     initial: (direction: number) => ({
@@ -134,7 +136,7 @@ export const LandingPage = () => {
                         warmup.volume = 0
                         warmup.play().catch(() => {})
                       } catch (_) {}
-                      window.location.href = '/home'
+                      navigate('/home')
                     }}
                     className="w-full sm:w-auto bg-[#ccff00] hover:bg-[#b8e600] text-black font-black px-12 py-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.4)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-4 text-sm tracking-[0.2em] group"
                   >
