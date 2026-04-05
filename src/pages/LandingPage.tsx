@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, BookOpen, Home as HomeIcon, CheckCircle2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 
 export const LandingPage = () => {
@@ -120,12 +119,28 @@ export const LandingPage = () => {
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-6 w-full sm:w-auto">
-                  <Link to="/home">
-                    <Button className="w-full sm:w-auto bg-[#ccff00] hover:bg-[#b8e600] text-black font-black px-12 py-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.4)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-4 text-sm tracking-[0.2em] group">
-                      START PLAYING
-                      <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                    </Button>
-                  </Link>
+                  <Button
+                    onClick={() => {
+                      // Unlock browser audio autoplay on user gesture
+                      try {
+                        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                        const buf = ctx.createBuffer(1, 1, 22050)
+                        const src = ctx.createBufferSource()
+                        src.buffer = buf
+                        src.connect(ctx.destination)
+                        src.start(0)
+                        // Also pre-warm the wicket audio
+                        const warmup = new Audio('/audio/wicket.wav')
+                        warmup.volume = 0
+                        warmup.play().catch(() => {})
+                      } catch (_) {}
+                      window.location.href = '/home'
+                    }}
+                    className="w-full sm:w-auto bg-[#ccff00] hover:bg-[#b8e600] text-black font-black px-12 py-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.4)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-4 text-sm tracking-[0.2em] group"
+                  >
+                    START PLAYING
+                    <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                  </Button>
                 </div>
               </motion.div>
             ) : view === 'rules' ? (

@@ -84,7 +84,7 @@ export function JoinRoomPage() {
       }
 
       // Wait a moment for the update to propagate, then verify by fetching
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 150))
 
       const { data: verifyRoom, error: verifyError } = await supabase
         .from('rooms')
@@ -115,6 +115,7 @@ export function JoinRoomPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
         className="w-full max-w-md z-10"
       >
         <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-[0_0_50px_-12px_rgba(204,255,0,0.15)] overflow-hidden">

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,6 +56,44 @@ export function GamePage() {
   const [matchResult, setMatchResult] = useState<{ winner: string; targetScore: number; player1Score: number; player2Score: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Wicket sound effect — preloaded for instant playback
+  const wicketAudioRef = useRef<HTMLAudioElement | null>(null)
+  
+  useEffect(() => {
+    const audio = new Audio('/audio/wicket.wav')
+    audio.preload = 'auto'
+    wicketAudioRef.current = audio
+  }, [])
+
+  const unlockAudio = () => {
+    const audio = wicketAudioRef.current
+    if (audio && audio.paused) {
+      audio.volume = 0
+      audio.play().then(() => {
+        audio.pause()
+        audio.volume = 1
+        audio.currentTime = 0
+      }).catch(() => {})
+    }
+  }
+
+  const playWicketSound = () => {
+    try {
+      const audio = wicketAudioRef.current
+      if (audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      }
+    } catch (_) {}
+  }
+
+  // Globally trigger audio for BOTH players when game_state resolves to OUT
+  useEffect(() => {
+    if (gameState?.ball_result === 'OUT') {
+      playWicketSound()
+    }
+  }, [gameState?.current_ball_number, gameState?.ball_result])
+
   // UI State
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,7 +103,8 @@ export function GamePage() {
   const isProcessingRef = useRef(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [gameStarted, setGameStarted] = useState(false)
-  const [startCountdown, setStartCountdown] = useState<number | null>(null)
+  const [syncReady, setSyncReady] = useState(false)
+  const [startCountdown, setStartCountdown] = useState<number | string | null>('SYNCING...')
   const [isTossActive, setIsTossActive] = useState(false)
   const [headsPos, setHeadsPos] = useState<'top' | 'bottom'>('top')
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -185,7 +224,26 @@ export function GamePage() {
             setShowResultModal(true)
           }
         )
-        .subscribe()
+        .on(
+          'broadcast',
+          { event: 'sync_ping' },
+          () => {
+            if (!mounted) return
+            setSyncReady(true)
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED' && mounted) {
+            // If P2 successfully subscribes, ping P1 to commence the synchronized countdown
+            if (playerIdRef.current !== roomRef.current?.player1_id) {
+              roomChannel.send({
+                type: 'broadcast',
+                event: 'sync_ping'
+              }).catch(() => {})
+              setSyncReady(true)
+            }
+          }
+        })
       channels.push(roomChannel)
 
       // Subscribe to game_state - main game logic
@@ -239,6 +297,12 @@ export function GamePage() {
               const msgKey = `${currentInningsRef.current}-${newGameState.current_ball_number}`
               if (!addedMessagesRef.current.has(msgKey)) {
                 addedMessagesRef.current.add(msgKey)
+
+                // Play wicket sound for P2 (non-processor) when OUT is received via subscription
+                if (newGameState.ball_result.includes('OUT') && playerIdRef.current !== player1IdRef.current) {
+                  playWicketSound()
+                }
+
                 // Use scoreRef as initial values; we'll patch with fresh DB score below
                 const currentScore = scoreRef.current
                 setBallMessages(prev => [...prev, {
@@ -435,34 +499,55 @@ export function GamePage() {
     }
   }
 
+  // Fallback sync timer in case socket ping fails
+  useEffect(() => {
+    if (room?.player2_id && room?.status === 'playing' && !syncReady && !gameStarted) {
+      const fallback = setTimeout(() => {
+        setSyncReady(true)
+      }, 2000)
+      return () => clearTimeout(fallback)
+    }
+  }, [room?.player2_id, room?.status, syncReady, gameStarted])
+
   // Game start countdown animation (5,4,3,2,1)
   useEffect(() => {
-    if (!room?.player2_id || room?.status !== 'playing' || gameStarted) return
+    if (!room?.player2_id || room?.status !== 'playing' || gameStarted || !syncReady) return
 
     let countdown = 5
-    setStartCountdown(countdown)
+    let interval: ReturnType<typeof setInterval>
 
-    const interval = setInterval(() => {
-      countdown -= 1
-      if (countdown < 0) {
-        clearInterval(interval)
-        setStartCountdown(null)
-        if (!roomRef.current?.first_batter) {
-          setIsTossActive(true)
+    const start = () => {
+      setStartCountdown(countdown)
+      interval = setInterval(() => {
+        countdown -= 1
+        if (countdown < 0) {
+          clearInterval(interval)
+          // Hold for 1 second to allow lagging players to catch up (Fair Play)
+          setStartCountdown('READY?')
+          setTimeout(() => {
+            setStartCountdown(null)
+            if (!roomRef.current?.first_batter) {
+              setIsTossActive(true)
+            } else {
+              setGameStarted(true)
+            }
+          }, 1000)
         } else {
-          setGameStarted(true)
+          setStartCountdown(countdown)
         }
-      } else {
-        setStartCountdown(countdown)
-      }
-    }, 1000)
+      }, 1000)
+    }
 
-    return () => clearInterval(interval)
-  }, [room?.player2_id, room?.status, gameStarted])
+    start()
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [room?.player2_id, room?.status, gameStarted, syncReady])
 
   // SYNCHRONIZED TIMER
   useEffect(() => {
-    if (!gameState?.ball_start_time || room?.status !== 'playing' || !gameStarted) {
+    if (!gameState?.ball_start_time || room?.status !== 'playing' || !gameStarted || gameState.current_ball_number === 0) {
       return
     }
 
@@ -512,13 +597,14 @@ export function GamePage() {
     if (isTossActive) {
       const interval = setInterval(() => {
         setHeadsPos(prev => prev === 'top' ? 'bottom' : 'top')
-      }, 400) // Snapshot swap every 400ms
+      }, 300) // Snapshot swap every 300ms
       return () => clearInterval(interval)
     }
   }, [isTossActive])
 
   const handleTossClick = async (choice: 'heads' | 'tails') => {
     if (!roomId || !playerId || !isTossActive || room?.first_batter) return
+    unlockAudio()
     
     if (choice === 'heads') {
       toast.success('You tapped HEADS! Resolving toss...')
@@ -534,17 +620,19 @@ export function GamePage() {
         console.error('[TOSS] Supabase update error:', error)
         toast.error('Toss update failed on server')
       } else if (data && data.length > 0) {
-        // WE won the toss update
-        setIsTossActive(false)
-        setGameStarted(true)
-        setRoom(prev => prev ? { ...prev, first_batter: playerId } : null)
-        
         // Broadcast the win to the opponent instantly over WebSockets!
         await supabase.realtime.channel(`room:${roomId}`).send({
           type: 'broadcast',
           event: 'toss_won',
           payload: { winner: playerId }
         })
+        
+        // Wait 300ms before resolving for P1 locally, so P2's broadcast arrives at exactly the same time (Perfect Sync)
+        setTimeout(() => {
+          setIsTossActive(false)
+          setGameStarted(true)
+          setRoom(prev => prev ? { ...prev, first_batter: playerId } : null)
+        }, 300)
       } else {
         // Fallback for unexpected empty return
         toast.error('Toss unresolved. Please retry.')
@@ -585,6 +673,8 @@ export function GamePage() {
       toast.error('Cannot submit choice')
       return
     }
+
+    unlockAudio()
 
     // Prevent double submission for same ball
     if (submittedForBallRef.current === gameState.current_ball_number) {
@@ -685,9 +775,7 @@ export function GamePage() {
       setScore(updatedScore as Score)
 
       // Mark ball result WITH choices stored for message display (prevents timer double-fire)
-      const ballResultText = isOut ? 'OUT 🏏' : (runs === 0 ? 'DOT BALL ●' : `${runs} runs ✅`)
-
-      // Add message immediately on P1's side (P2 gets it via score subscription)
+      const ballResultText = isOut ? 'OUT' : (runs === 0 ? 'DOT BALL' : `${runs} RUNS`)
       setBallMessages(prev => [...prev, {
         ball: currentBallNum,
         innings: currentInnings,
@@ -709,11 +797,41 @@ export function GamePage() {
         })
         .eq('room_id', roomId)
 
-      // Hold the result on screen for 1.5s for BOTH players before generating new ball
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Hold the result on screen for 400ms for BOTH players before generating new ball
+      await new Promise(resolve => setTimeout(resolve, 400))
 
-      if (isLastBall) {
-        if (currentInnings === 1) {
+      // ── INNINGS 2 EARLY WIN CHECK (runs after every ball) ──
+      // Target = innings-1 batter's score + 1. If chaser already hit it, end NOW.
+      // Use Math.max to handle stale roomRef — currentInningsRef tracks UI state which updates faster
+      const actualInnings = Math.max(currentInnings, currentInningsRef.current)
+      const isInnings2 = actualInnings === 2
+      const isPlayer1FirstBatterLocal = currentRoom.first_batter === currentRoom.player1_id
+      const inn1ScoreLocal = isPlayer1FirstBatterLocal ? updatedScore.player1_score : updatedScore.player2_score
+      const inn2ScoreLocal = isPlayer1FirstBatterLocal ? updatedScore.player2_score : updatedScore.player1_score
+      const targetLocal = inn1ScoreLocal + 1
+      const chaserWonEarly = isInnings2 && inn2ScoreLocal >= targetLocal
+
+      if (chaserWonEarly) {
+        // Chaser has met/exceeded the target — END MATCH IMMEDIATELY
+        const player1Score = updatedScore.player1_score
+        const player2Score = updatedScore.player2_score
+
+        const inn2Player = isPlayer1FirstBatterLocal ? 'player2' : 'player1'
+        const winner = inn2Player  // chaser always wins if they reached target
+
+        setMatchResult({ winner, targetScore: targetLocal, player1Score, player2Score })
+        setShowResultModal(true)
+
+        await supabase.realtime.channel(`room:${roomId}`).send({
+          type: 'broadcast',
+          event: 'match_complete',
+          payload: { winner, targetScore: targetLocal, player1Score, player2Score }
+        })
+
+        await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
+      } else if (isLastBall) {
+        if (actualInnings === 1) {
+          // Last ball of innings 1 → start innings 2
           const { data: serverTime } = await supabase.rpc('get_server_timestamp')
           const ballStartTime = serverTime || new Date().toISOString()
 
@@ -725,38 +843,30 @@ export function GamePage() {
             player1_choice: null,
             player2_choice: null
           }).eq('room_id', roomId)
-        } else if (currentInnings === 2) {
+        } else {
+          // Last ball of innings 2 — chaser did NOT reach target → innings-1 batter wins
           const player1Score = updatedScore.player1_score
           const player2Score = updatedScore.player2_score
-          
-          const isPlayer1FirstBatter = currentRoom.first_batter === currentRoom.player1_id
-          const inn1Score = isPlayer1FirstBatter ? player1Score : player2Score
-          const inn2Score = isPlayer1FirstBatter ? player2Score : player1Score
-          const target = inn1Score + 1
 
-          const inn2Player = isPlayer1FirstBatter ? 'player2' : 'player1'
-          const inn1Player = isPlayer1FirstBatter ? 'player1' : 'player2'
+          const inn1Player = isPlayer1FirstBatterLocal ? 'player1' : 'player2'
+          const winner = inn1Player
 
-          const winner = inn2Score >= target ? inn2Player : inn1Player
-
-          setMatchResult({ winner, targetScore: target, player1Score, player2Score })
+          setMatchResult({ winner, targetScore: targetLocal, player1Score, player2Score })
           setShowResultModal(true)
 
-          // Broadcast match result instantly via WebSocket so BOTH players see the modal
-          // at the same time — more reliable than waiting for postgres_changes delivery.
           await supabase.realtime.channel(`room:${roomId}`).send({
             type: 'broadcast',
             event: 'match_complete',
-            payload: { winner, targetScore: target, player1Score, player2Score }
+            payload: { winner, targetScore: targetLocal, player1Score, player2Score }
           })
 
           await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
         }
       } else {
+        // Neither early win nor last ball — proceed to next ball
         const nextBallNum = currentBallNum + 1
         const { data: serverTime } = await supabase.rpc('get_server_timestamp')
         const ballStartTime = serverTime || new Date().toISOString()
-
 
         await supabase.from('game_state').update({
           current_ball_number: nextBallNum,
@@ -768,7 +878,7 @@ export function GamePage() {
       }
 
       // Optimistically update local state for P1
-      if (isLastBall && currentInnings === 1) {
+      if (isLastBall && actualInnings === 1) {
         setRoom(prev => prev ? { ...prev, current_innings: 2 } : null)
         setGameState(prev => prev ? {
           ...prev,
@@ -777,7 +887,7 @@ export function GamePage() {
           player1_choice: null,
           player2_choice: null
         } : null)
-      } else if (!isLastBall) {
+      } else if (!isLastBall && !chaserWonEarly) {
         setGameState(prev => prev ? {
           ...prev,
           current_ball_number: currentBallNum + 1,
@@ -821,7 +931,7 @@ export function GamePage() {
       const isLastBall = currentBallNum === 10
 
 
-      const dotBallText = 'DOT BALL ●'
+      const dotBallText = 'DOT BALL'
 
       // Add dot ball message immediately for P1 (P2 gets it via game_state subscription)
       setBallMessages(prev => [...prev, {
@@ -845,11 +955,42 @@ export function GamePage() {
         })
         .eq('room_id', roomId)
 
-      // Hold the dot ball result on screen for 1.5s for BOTH players
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Hold the dot ball result on screen for 400ms for BOTH players
+      await new Promise(resolve => setTimeout(resolve, 400))
 
-      if (isLastBall) {
-        if (currentInnings === 1) {
+      // ── INNINGS 2 EARLY WIN CHECK (dot balls can't win, but keep structure consistent) ──
+      const actualInnings = Math.max(currentInnings, currentInningsRef.current)
+      const isInnings2 = actualInnings === 2
+      const isPlayer1FirstBatterLocal = currentRoom.first_batter === currentRoom.player1_id
+      const currentScoreNow = scoreRef.current
+      const p1ScoreNow = currentScoreNow?.player1_score ?? 0
+      const p2ScoreNow = currentScoreNow?.player2_score ?? 0
+      const inn1ScoreLocal = isPlayer1FirstBatterLocal ? p1ScoreNow : p2ScoreNow
+      const inn2ScoreLocal = isPlayer1FirstBatterLocal ? p2ScoreNow : p1ScoreNow
+      const targetLocal = inn1ScoreLocal + 1
+      const chaserWonEarly = isInnings2 && inn2ScoreLocal >= targetLocal
+
+      if (chaserWonEarly) {
+        // Chaser reached target — end match
+        const { data: scoreData } = await supabase.from('scores').select('*').eq('room_id', roomId).single()
+        const player1Score = scoreData?.player1_score || 0
+        const player2Score = scoreData?.player2_score || 0
+
+        const inn2Player = isPlayer1FirstBatterLocal ? 'player2' : 'player1'
+        const winner = inn2Player
+
+        setMatchResult({ winner, targetScore: targetLocal, player1Score, player2Score })
+        setShowResultModal(true)
+
+        await supabase.realtime.channel(`room:${roomId}`).send({
+          type: 'broadcast',
+          event: 'match_complete',
+          payload: { winner, targetScore: targetLocal, player1Score, player2Score }
+        })
+
+        await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
+      } else if (isLastBall) {
+        if (actualInnings === 1) {
           const { data: serverTime } = await supabase.rpc('get_server_timestamp')
           const ballStartTime = serverTime || new Date().toISOString()
 
@@ -861,29 +1002,22 @@ export function GamePage() {
             player1_choice: null,
             player2_choice: null
           }).eq('room_id', roomId)
-        } else if (currentInnings === 2) {
+        } else {
+          // Last ball innings 2 — chaser didn't reach target → innings-1 batter wins
           const { data: scoreData } = await supabase.from('scores').select('*').eq('room_id', roomId).single()
           const player1Score = scoreData?.player1_score || 0
           const player2Score = scoreData?.player2_score || 0
 
-          const isPlayer1FirstBatter = currentRoom.first_batter === currentRoom.player1_id
-          const inn1Score = isPlayer1FirstBatter ? player1Score : player2Score
-          const inn2Score = isPlayer1FirstBatter ? player2Score : player1Score
-          const target = inn1Score + 1
+          const inn1Player = isPlayer1FirstBatterLocal ? 'player1' : 'player2'
+          const winner = inn1Player
 
-          const inn2Player = isPlayer1FirstBatter ? 'player2' : 'player1'
-          const inn1Player = isPlayer1FirstBatter ? 'player1' : 'player2'
-
-          const winner = inn2Score >= target ? inn2Player : inn1Player
-
-          setMatchResult({ winner, targetScore: target, player1Score, player2Score })
+          setMatchResult({ winner, targetScore: targetLocal, player1Score, player2Score })
           setShowResultModal(true)
 
-          // Broadcast so BOTH players see the result modal simultaneously
           await supabase.realtime.channel(`room:${roomId}`).send({
             type: 'broadcast',
             event: 'match_complete',
-            payload: { winner, targetScore: target, player1Score, player2Score }
+            payload: { winner, targetScore: targetLocal, player1Score, player2Score }
           })
 
           await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
@@ -902,7 +1036,7 @@ export function GamePage() {
         }).eq('room_id', roomId)
       }
 
-      if (isLastBall && currentInnings === 1) {
+      if (isLastBall && actualInnings === 1) {
         setRoom(prev => prev ? { ...prev, current_innings: 2 } : null)
         setGameState(prev => prev ? {
           ...prev,
@@ -911,7 +1045,7 @@ export function GamePage() {
           player1_choice: null,
           player2_choice: null
         } : null)
-      } else if (!isLastBall) {
+      } else if (!isLastBall && !chaserWonEarly) {
         setGameState(prev => prev ? {
           ...prev,
           current_ball_number: currentGameState.current_ball_number + 1,
@@ -1033,8 +1167,17 @@ export function GamePage() {
                   <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-primary fill-primary/20" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white drop-shadow-[0_0_5px_rgba(204,255,0,0.2)]">Innings {room.current_innings}</CardTitle>
-                  <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.2em]">Ball {gameState.current_ball_number}/10</p>
+                  {gameStarted ? (
+                    <>
+                      <CardTitle className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white drop-shadow-[0_0_5px_rgba(204,255,0,0.2)]">Innings {room.current_innings}</CardTitle>
+                      <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.2em]">Ball {gameState.current_ball_number}/10</p>
+                    </>
+                  ) : (
+                    <>
+                      <CardTitle className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white drop-shadow-[0_0_5px_rgba(204,255,0,0.2)]">ZPL Match</CardTitle>
+                      <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.2em]">Code: {room.room_code}</p>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
@@ -1115,14 +1258,14 @@ export function GamePage() {
                     transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
                     className="absolute inset-0 -m-12 sm:-m-20 border border-dashed border-primary/20 rounded-full"
                   />
-                  <div className="text-[6rem] sm:text-[10rem] font-black text-primary leading-none italic drop-shadow-[0_0_50px_rgba(204,255,0,0.5)]">
+                  <div className={`font-black text-primary leading-none italic drop-shadow-[0_0_50px_rgba(204,255,0,0.5)] ${typeof startCountdown === 'string' ? 'text-4xl sm:text-6xl tracking-widest' : 'text-[6rem] sm:text-[10rem]'}`}>
                     {startCountdown}
                   </div>
                   <p className="text-base sm:text-xl font-black text-white uppercase tracking-[0.4em] mt-6 sm:mt-8 italic">Prepare to Play</p>
                 </motion.div>
               </div>
             ) : isTossActive && !room?.first_batter ? (
-              <div className="flex flex-col items-center justify-center py-8 sm:py-10 space-y-8 sm:space-y-10 animate-in fade-in zoom-in duration-500">
+              <div className="flex flex-col items-center justify-center py-8 sm:py-10 space-y-8 sm:space-y-10 animate-in fade-in zoom-in duration-200">
                 <div className="text-center">
                   <div className="inline-block px-3 py-1 sm:px-4 sm:py-1.5 bg-primary/20 border border-primary/30 rounded-full mb-3 sm:mb-4">
                     <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.3em]">DECIDE ROLES</p>
@@ -1130,7 +1273,7 @@ export function GamePage() {
                   <h2 className="text-4xl sm:text-5xl font-black text-white italic uppercase tracking-tight mb-2 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">THE TOSS</h2>
                   <p className="text-gray-400 font-bold tracking-widest uppercase text-[10px] sm:text-xs">Tap <span className="text-primary font-black">HEADS</span> first to claim Batting!</p>
                 </div>
-                <div className={`flex flex-col gap-6 sm:gap-8 w-full max-w-[180px] sm:max-w-[220px] ${headsPos === 'top' ? '' : 'flex-col-reverse'} transition-all duration-300`}>
+                <div className={`flex flex-col gap-6 sm:gap-8 w-full max-w-[180px] sm:max-w-[220px] ${headsPos === 'top' ? '' : 'flex-col-reverse'} transition-all duration-150`}>
                   <Button 
                     size="lg" 
                     className="h-24 sm:h-32 text-3xl sm:text-4xl font-black bg-primary hover:bg-[#b8e600] text-black shadow-[0_15px_40px_-5px_rgba(204,255,0,0.3)] transition-all hover:scale-105 active:scale-95 border-b-4 sm:border-b-8 border-black/20 rounded-[1.5rem] sm:rounded-[2rem] italic tracking-tighter" 
@@ -1151,11 +1294,9 @@ export function GamePage() {
             ) : (
               <div className="flex flex-col gap-4 sm:gap-6 lg:gap-3 xl:gap-2.5">
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:gap-3 text-center items-stretch order-1">
-                  <motion.div
+                  <div
                     key={`score-${myScore}-${room.current_innings}-${isBatting}`}
-                    initial={{ scale: 0.9, opacity: 0.5 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 transition-all duration-500 shadow-xl relative overflow-hidden flex flex-col justify-center ${
+                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 shadow-xl relative overflow-hidden flex flex-col justify-center ${
                       isBatting
                         ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(204,255,0,0.1)] mb-2 sm:mb-4 lg:mb-1 lg:mt-[-4px]'
                         : 'bg-primary/5 border-primary/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]'
@@ -1163,8 +1304,8 @@ export function GamePage() {
                   >
                     {isBatting && <div className="absolute top-0 right-0 w-6 h-6 sm:w-8 sm:h-8 bg-primary rounded-bl-lg flex items-center justify-center opacity-80"><span className="text-[8px] sm:text-[10px] text-black font-black">★</span></div>}
                     <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest mb-1 ${isBatting ? 'text-primary' : 'text-primary/40'}`}>{myPlayerTag} {isBatting ? 'Batting' : 'Bowling'}</p>
-                    <p className={`text-2xl sm:text-4xl font-black tabular-nums transition-all ${isBatting ? 'text-white' : 'text-gray-400'}`}>{myScore}</p>
-                  </motion.div>
+                    <p className={`text-2xl sm:text-4xl font-black tabular-nums ${isBatting ? 'text-white' : 'text-gray-400'}`}>{myScore}</p>
+                  </div>
 
                   <div className="p-2 sm:p-4 rounded-2xl sm:rounded-3xl bg-white/[0.03] border-2 border-white/5 flex flex-col items-center justify-center relative group">
                     <p className="text-[8px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Ball</p>
@@ -1175,11 +1316,9 @@ export function GamePage() {
                     <div className="w-4 sm:w-8 h-0.5 bg-primary/20 mt-1 sm:mt-2 rounded-full" />
                   </div>
 
-                  <motion.div
+                  <div
                     key={`opponent-${theirScore}-${room.current_innings}-${isBatting}`}
-                    initial={{ scale: 0.9, opacity: 0.5 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 transition-all duration-500 shadow-xl relative overflow-hidden flex flex-col justify-center ${
+                    className={`p-2 sm:p-4 rounded-2xl sm:rounded-3xl border-2 shadow-xl relative overflow-hidden flex flex-col justify-center ${
                       !isBatting
                         ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(204,255,0,0.1)] mb-2 sm:mb-4 lg:mb-1 lg:mt-[-4px]'
                         : 'bg-primary/10 border-primary/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]'
@@ -1187,8 +1326,8 @@ export function GamePage() {
                   >
                     {!isBatting && <div className="absolute top-0 right-0 w-6 h-6 sm:w-8 sm:h-8 bg-primary rounded-bl-lg flex items-center justify-center opacity-80"><span className="text-[8px] sm:text-[10px] text-black font-black">★</span></div>}
                     <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest mb-1 ${!isBatting ? 'text-primary' : 'text-primary/40'}`}>{theirPlayerTag} {!isBatting ? 'Batting' : 'Bowling'}</p>
-                    <p className={`text-2xl sm:text-4xl font-black tabular-nums transition-all ${!isBatting ? 'text-white' : 'text-gray-400'}`}>{theirScore}</p>
-                  </motion.div>
+                    <p className={`text-2xl sm:text-4xl font-black tabular-nums ${!isBatting ? 'text-white' : 'text-gray-400'}`}>{theirScore}</p>
+                  </div>
                 </div>
 
                 {/* Innings 2 Target Banner */}
@@ -1219,91 +1358,66 @@ export function GamePage() {
                   </motion.div>
                 )}
 
-                {/* Selection Area (Above Feed on mobile) */}
-                <div className="border-t border-primary/10 pt-3 sm:pt-4 lg:pt-2 order-3 min-h-[160px] sm:min-h-[200px] lg:min-h-[180px] flex flex-col justify-center">
-                  <AnimatePresence mode="wait">
-                      {gameState.ball_result ? (
-                        <motion.div
-                          key="result"
-                          initial={{ scale: 0.9, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 1.1, opacity: 0 }}
-                          className="rounded-[1.2rem] sm:rounded-[1.5rem] border-2 border-primary/40 bg-primary/10 p-4 sm:p-6 text-center shadow-[0_0_30px_rgba(204,255,0,0.1)] backdrop-blur-md relative overflow-hidden"
-                        >
-                          <div className="absolute inset-0 bg-primary/5 blur-3xl rounded-full" />
-                          <p className="text-xl sm:text-3xl font-black italic uppercase tracking-tighter text-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.5)] relative z-10">{gameState.ball_result}</p>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          key="controls"
-                          initial={{ scale: 0.9, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 0.9, opacity: 0 }}
-                          className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-4 lg:gap-3 max-w-sm sm:max-w-md mx-auto place-items-center"
-                        >
-                          {[1, 2, 3, 4, 5, 6].map((num) => (
-                            <button
-                              key={num}
-                              onClick={() => submitChoice(num)}
-                              disabled={selectedNumber !== null || isProcessing}
-                              className={`group relative transition-all duration-300 flex items-center justify-center bg-transparent focus:outline-none ${
-                                selectedNumber === num 
-                                  ? 'scale-125 z-10' 
-                                  : 'hover:scale-110'
-                              } ${
-                                (selectedNumber !== null && selectedNumber !== num) || isProcessing 
-                                  ? 'opacity-30 grayscale-[0.8] cursor-not-allowed scale-90' 
-                                  : 'cursor-pointer active:scale-95'
-                              }`}
-                            >
-                              <div className={`absolute inset-0 rounded-full blur-xl transition-all duration-300 ${
-                                selectedNumber === num 
-                                  ? 'bg-primary/30 scale-125' 
-                                  : 'bg-primary/0 group-hover:bg-primary/20 scale-110'
-                              }`} />
-                              
-                              <img 
-                                src={`/RUNS/${num}.webp`} 
-                                alt={`Run ${num}`}
-                                className={`w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain pointer-events-none transition-all duration-300 filter ${
-                                  selectedNumber === num 
-                                    ? 'drop-shadow-[0_0_20px_#ccff00] brightness-125' 
-                                    : 'drop-shadow-[0_0_5px_rgba(255,255,255,0.1)] group-hover:brightness-110'
-                                }`}
-                                draggable={false}
-                              />
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                {/* Selection Area (Above Feed on mobile) — FIXED HEIGHT + RELATIVE for perfect transition without shift */}
+                <div className="border-t border-primary/10 pt-3 sm:pt-4 lg:pt-2 order-3 h-[180px] sm:h-[220px] lg:h-[200px] flex items-center justify-center overflow-hidden relative w-full">
+                  <div className="absolute inset-0 flex items-center justify-center w-full">
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-4 lg:gap-3 max-w-sm sm:max-w-md mx-auto place-items-center w-full">
+                    {[1, 2, 3, 4, 5, 6].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => submitChoice(num)}
+                        disabled={selectedNumber !== null || isProcessing}
+                        className={`relative flex items-center justify-center bg-transparent focus:outline-none ${
+                          (selectedNumber !== null && selectedNumber !== num) || isProcessing 
+                            ? 'opacity-40 cursor-not-allowed' 
+                            : 'cursor-pointer'
+                        }`}
+                      >
+                        <div className={`absolute inset-0 rounded-full blur-xl ${
+                          selectedNumber === num 
+                            ? 'bg-primary/30 scale-125' 
+                            : 'bg-primary/0'
+                        }`} />
+                        
+                        <img 
+                          src={`/RUNS/${num}.webp`} 
+                          alt={`Run ${num}`}
+                          className={`w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain ${
+                            selectedNumber === num 
+                              ? 'opacity-100' 
+                              : 'opacity-70'
+                          }`}
+                          draggable={false}
+                        />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* History Feed (Updated to show only LATEST ball) */}
                 <div className="order-4 mt-2 sm:mt-3 lg:mt-1 lg:mb-[-4px]">
-                  {ballMessages.length > 0 && (
-                    <div className="rounded-[1rem] bg-white/[0.03] border border-white/10 p-2 sm:p-3 lg:p-2 overflow-hidden shadow-inner">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <ListChecks className="w-3 h-3 text-primary" />
-                          <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.3em]">Live Feed</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                          <span className="text-[7px] sm:text-[9px] font-bold text-primary/60 uppercase">Last Delivery</span>
-                        </div>
+                  <div className="rounded-[1rem] bg-white/[0.03] border border-white/10 p-2 sm:p-3 lg:p-2 overflow-hidden shadow-inner min-h-[110px] sm:min-h-[130px] flex flex-col">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <ListChecks className="w-3 h-3 text-primary" />
+                        <p className="text-[8px] sm:text-[10px] font-black text-primary uppercase tracking-[0.3em]">Live Feed</p>
                       </div>
-                      
-                      {(() => {
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                        <span className="text-[7px] sm:text-[9px] font-bold text-primary/60 uppercase">Live Event</span>
+                      </div>
+                    </div>
+                    
+                    {ballMessages.length > 0 ? (
+                      (() => {
                         const msg = ballMessages[ballMessages.length - 1]
                         const isOut = msg.result.includes('OUT')
                         const isDot = msg.result.includes('DOT')
                         return (
-                          <motion.div
+                          <div
                             key={ballMessages.length}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className={`p-2 sm:p-3 rounded-lg sm:rounded-xl border transition-all ${
+                            className={`flex-1 p-2 sm:p-3 rounded-lg sm:rounded-xl border flex flex-col justify-center ${
                               isOut
                                 ? 'bg-destructive/10 border-destructive/30 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
                                 : isDot
@@ -1316,13 +1430,13 @@ export function GamePage() {
                                 <span className="text-[7px] sm:text-[9px] font-black bg-black/40 px-1.5 py-0.5 rounded-full text-white/50 uppercase italic">Innings {msg.innings}</span>
                                 <span className="text-[7px] sm:text-[9px] font-black bg-black/40 px-1.5 py-0.5 rounded-full text-white/50 uppercase italic">Ball {msg.ball}</span>
                               </div>
-                              <span className={`text-xs sm:text-sm font-black italic tracking-tighter uppercase ${
+                              <span className={`text-base sm:text-xl font-black italic tracking-tighter uppercase ${
                                 isOut ? 'text-destructive drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]' : isDot ? 'text-white/30' : 'text-primary drop-shadow-[0_0_10px_rgba(204,255,0,0.3)]'
                               }`}>
                                 {msg.result}
                               </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-auto">
                               <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg border border-white/5">
                                 <span className="text-[7px] sm:text-[8px] font-bold text-gray-500 uppercase tracking-widest">You</span>
                                 <span className="text-[10px] sm:text-xs font-black text-white">{myPlayerTag === 'P1' ? (msg.p1_choice ?? '-') : (msg.p2_choice ?? '-')}</span>
@@ -1332,11 +1446,15 @@ export function GamePage() {
                                 <span className="text-[10px] sm:text-xs font-black text-white">{myPlayerTag === 'P1' ? (msg.p2_choice ?? '-') : (msg.p1_choice ?? '-')}</span>
                               </div>
                             </div>
-                          </motion.div>
+                          </div>
                         )
-                      })()}
-                    </div>
-                  )}
+                      })()
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center p-2 sm:p-3 rounded-lg sm:rounded-xl border bg-primary/5 border-primary/20">
+                        <p className="text-[10px] sm:text-xs font-black uppercase text-primary/40 tracking-widest animate-pulse">Waiting for delivery...</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

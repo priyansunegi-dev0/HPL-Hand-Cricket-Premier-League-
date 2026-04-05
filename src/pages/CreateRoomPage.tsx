@@ -88,7 +88,7 @@ export function CreateRoomPage() {
       // Navigate directly to game instead of waiting room
       setTimeout(() => {
         navigate(`/game/${room.id}`)
-      }, 500)
+      }, 150)
     } catch (error) {
       console.error('Error creating room:', error)
       toast.error('Failed to create room')
@@ -106,6 +106,7 @@ export function CreateRoomPage() {
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2 }}
         className="w-full max-w-md z-10 my-auto"
       >
         <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-[0_0_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden">

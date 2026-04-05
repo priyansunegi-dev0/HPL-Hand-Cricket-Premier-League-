@@ -50,21 +50,30 @@ export function ResultPage() {
     )
   }
 
-  // P1/P2 tags are based on TOSS result: toss winner = P1, loser = P2
+  // P1/P2 tags are based on TOSS result: toss winner = P1 (batted first), loser = P2 (chased)
   const isTossWinner = !!room.first_batter && room.first_batter === playerId
-  // Map toss-based P1/P2 to the underlying player1/player2 score columns
   const isTossWinnerRoomP1 = room.first_batter === room.player1_id
-  const p1TagScore = isTossWinnerRoomP1 ? score.player1_score : score.player2_score  // toss-P1 raw score
-  const p2TagScore = isTossWinnerRoomP1 ? score.player2_score : score.player1_score  // toss-P2 raw score
+
+  // inn1Score = toss winner's innings-1 score (fixed, doesn't change in innings 2)
+  // inn2Score = chaser's innings-2 score
+  const inn1Score = isTossWinnerRoomP1 ? score.player1_score : score.player2_score
+  const inn2Score = isTossWinnerRoomP1 ? score.player2_score : score.player1_score
+  const target = inn1Score + 1   // chaser needs AT LEAST this to win
+
+  // Chaser wins only if they reached the target (inn1Score + 1)
+  // Equal scores → innings-1 batter wins (chaser fell short by 1)
+  const chaserWon = inn2Score >= target
+
+  const p1TagScore = inn1Score   // toss winner (P1 tag) batted in innings 1
+  const p2TagScore = inn2Score   // toss loser  (P2 tag) chased in innings 2
   const myScore = isTossWinner ? p1TagScore : p2TagScore
   const theirScore = isTossWinner ? p2TagScore : p1TagScore
 
-  const result =
-    myScore > theirScore
-      ? 'win'
-      : myScore < theirScore
-      ? 'lose'
-      : 'draw'
+  // result from THIS player's perspective
+  const result: 'win' | 'lose' =
+    isTossWinner
+      ? (chaserWon ? 'lose' : 'win')   // toss winner wins if chaser fell short
+      : (chaserWon ? 'win'  : 'lose')  // chaser wins if they reached target
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-start sm:justify-center bg-background p-2 sm:p-4 py-8 sm:py-12 relative overflow-y-auto overflow-x-hidden font-sans text-white">
@@ -85,9 +94,7 @@ export function ResultPage() {
             <CardTitle className="text-3xl sm:text-5xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
               {result === 'win'
                 ? 'YOU WON!'
-                : result === 'lose'
-                ? 'YOU LOST'
-                : "IT'S A DRAW"}
+                : 'YOU LOST'}
             </CardTitle>
             <p className="text-[10px] sm:text-xs font-black text-primary uppercase tracking-[0.3em] mt-2 opacity-60">MATCH COMPLETE</p>
           </CardHeader>
