@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { LandingPage } from './pages/LandingPage'
 import { HomePage } from './pages/HomePage'
 import { CreateRoomPage } from './pages/CreateRoomPage'
@@ -20,6 +21,7 @@ export function App() {
         <Route path="/result/:roomId" element={<ResultPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <Analytics />
     </BrowserRouter>
   )
 }
