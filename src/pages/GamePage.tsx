@@ -1237,7 +1237,7 @@ export function GamePage() {
                 )}
 
                 {!gameState.ball_result && (
-                  <div className="flex flex-wrap justify-center gap-4 sm:gap-6 md:gap-8 max-w-2xl mx-auto">
+                  <div className="grid grid-cols-3 gap-4 sm:gap-6 md:gap-8 max-w-md mx-auto place-items-center">
                     {[1, 2, 3, 4, 5, 6].map((num) => (
                       <button
                         key={num}
