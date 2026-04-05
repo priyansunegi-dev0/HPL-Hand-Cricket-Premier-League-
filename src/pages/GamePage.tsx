@@ -229,18 +229,32 @@ export function GamePage() {
           { event: 'sync_ping' },
           () => {
             if (!mounted) return
+            // If P1 receives a ping from P2, broadcast the official sync_start
+            if (playerIdRef.current === roomRef.current?.player1_id) {
+              roomChannel.send({
+                type: 'broadcast',
+                event: 'sync_start'
+              }).catch(() => {})
+              setSyncReady(true)
+            }
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'sync_start' },
+          () => {
+            if (!mounted) return
             setSyncReady(true)
           }
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED' && mounted) {
-            // If P2 successfully subscribes, ping P1 to commence the synchronized countdown
+            // If P2 successfully subscribes, ping P1 to indicate readiness
             if (playerIdRef.current !== roomRef.current?.player1_id) {
               roomChannel.send({
                 type: 'broadcast',
                 event: 'sync_ping'
               }).catch(() => {})
-              setSyncReady(true)
             }
           }
         })
@@ -499,12 +513,12 @@ export function GamePage() {
     }
   }
 
-  // Fallback sync timer in case socket ping fails
+  // Fallback sync timer in case socket ping fails (increased for safety)
   useEffect(() => {
     if (room?.player2_id && room?.status === 'playing' && !syncReady && !gameStarted) {
       const fallback = setTimeout(() => {
         setSyncReady(true)
-      }, 2000)
+      }, 5000)
       return () => clearTimeout(fallback)
     }
   }, [room?.player2_id, room?.status, syncReady, gameStarted])
