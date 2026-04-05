@@ -218,6 +218,20 @@ The app is fully responsive and works on:
 - Supabase client configured with proper types
 - Clean component architecture with separate pages
 
+## Deployment (Vercel)
+
+This project is fully ready for zero-config deployment on Vercel.
+
+1. Create an account on [Vercel](https://vercel.com/) and link your GitHub account.
+2. Click **Add New** > **Project** and select your HPL GitHub repository.
+3. In the Configuration screen, expand the **Environment Variables** section.
+4. Add the following keys (copy their values from your local `.env`):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+5. Click **Deploy**. Vercel will automatically detect that it's a Vite application and handle the build process.
+
+*Note: Since the game uses WebSockets via Supabase Realtime, Vercel's standard HTTP routing will work perfectly out of the box!*
+
 ## Future Enhancements
 
 - Player usernames
