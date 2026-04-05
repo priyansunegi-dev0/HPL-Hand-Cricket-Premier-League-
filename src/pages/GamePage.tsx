@@ -120,6 +120,7 @@ export function GamePage() {
   // Tracks whether the result modal has been triggered once — prevents X-button close
   // from immediately re-opening the modal (useEffect re-fires on state change otherwise).
   const hasShownResultRef = useRef(false)
+  const pulsingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { scoreRef.current = score }, [score])
@@ -230,7 +231,7 @@ export function GamePage() {
           () => {
             if (!mounted) return
             // If P1 receives a ping from P2, broadcast the official sync_start
-            if (playerIdRef.current === roomRef.current?.player1_id) {
+            if (playerIdRef.current === (roomRef.current?.player1_id || player1IdRef.current)) {
               roomChannel.send({
                 type: 'broadcast',
                 event: 'sync_start'
@@ -244,17 +245,29 @@ export function GamePage() {
           { event: 'sync_start' },
           () => {
             if (!mounted) return
+            if (pulsingIntervalRef.current) {
+              clearInterval(pulsingIntervalRef.current)
+              pulsingIntervalRef.current = null
+            }
             setSyncReady(true)
           }
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED' && mounted) {
-            // If P2 successfully subscribes, ping P1 to indicate readiness
-            if (playerIdRef.current !== roomRef.current?.player1_id) {
-              roomChannel.send({
-                type: 'broadcast',
-                event: 'sync_ping'
-              }).catch(() => {})
+            // Aggressive pulsing: P2 pings P1 every 500ms until a sync_start is received
+            if (playerIdRef.current !== (roomRef.current?.player1_id || player1IdRef.current)) {
+              if (pulsingIntervalRef.current) clearInterval(pulsingIntervalRef.current)
+              
+              const sendPing = () => {
+                if (!mounted || syncReady) return
+                roomChannel.send({
+                  type: 'broadcast',
+                  event: 'sync_ping'
+                }).catch(() => {})
+              }
+              
+              sendPing()
+              pulsingIntervalRef.current = setInterval(sendPing, 500)
             }
           }
         })
@@ -500,6 +513,10 @@ export function GamePage() {
 
       if (updatedRoom) {
         setRoom(updatedRoom)
+        // Auto-snap sync if database shows game is already past the entry point
+        if (updatedRoom.player2_id && (updatedRoom.first_batter || updatedRoom.status !== 'waiting') && !syncReady) {
+          setSyncReady(true)
+        }
         if (updatedRoom.player2_id) {
           toast.success('Opponent joined!')
         } else {
@@ -513,12 +530,12 @@ export function GamePage() {
     }
   }
 
-  // Fallback sync timer in case socket ping fails (increased for safety)
+  // Fallback sync timer in case socket ping fails (Aggressive 2s fallback)
   useEffect(() => {
     if (room?.player2_id && room?.status === 'playing' && !syncReady && !gameStarted) {
       const fallback = setTimeout(() => {
         setSyncReady(true)
-      }, 5000)
+      }, 2000)
       return () => clearTimeout(fallback)
     }
   }, [room?.player2_id, room?.status, syncReady, gameStarted])
