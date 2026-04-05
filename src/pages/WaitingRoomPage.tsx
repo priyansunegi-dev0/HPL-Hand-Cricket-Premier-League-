@@ -71,8 +71,7 @@ export function WaitingRoomPage() {
             }
           }
         )
-        .subscribe((status: string, err?: any) => {
-        })
+        .subscribe()
     }
 
     setupSubscription()
