@@ -1237,18 +1237,29 @@ export function GamePage() {
                 )}
 
                 {!gameState.ball_result && (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-wrap justify-center gap-4 sm:gap-6 md:gap-8 max-w-2xl mx-auto">
                     {[1, 2, 3, 4, 5, 6].map((num) => (
-                      <Button
+                      <button
                         key={num}
-                        size="lg"
-                        variant={selectedNumber === num ? 'default' : 'outline'}
-                        className="h-20 text-3xl font-bold"
                         onClick={() => submitChoice(num)}
                         disabled={selectedNumber !== null || isProcessing}
+                        className={`relative transition-all duration-300 flex items-center justify-center bg-transparent focus:outline-none rounded-full ${
+                          selectedNumber === num 
+                            ? 'scale-125 z-10 drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]' 
+                            : 'hover:scale-110 drop-shadow-md hover:drop-shadow-xl'
+                        } ${
+                          (selectedNumber !== null && selectedNumber !== num) || isProcessing 
+                            ? 'opacity-40 grayscale cursor-not-allowed scale-90' 
+                            : 'cursor-pointer active:scale-95'
+                        }`}
                       >
-                        {num}
-                      </Button>
+                        <img 
+                          src={`/RUNS/${num}.webp`} 
+                          alt={`Run ${num}`}
+                          className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain pointer-events-none drop-shadow-sm"
+                          draggable={false}
+                        />
+                      </button>
                     ))}
                   </div>
                 )}
