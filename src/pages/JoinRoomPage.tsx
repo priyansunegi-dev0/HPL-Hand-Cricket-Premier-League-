@@ -73,8 +73,6 @@ export function JoinRoomPage() {
         .from('rooms')
         .update({
           player2_id: playerId,
-          status: 'playing',
-          current_turn: 'player1', // Player 1 (creator/batter) goes first
         })
         .eq('id', room.id)
 
@@ -83,21 +81,8 @@ export function JoinRoomPage() {
         throw updateError
       }
 
-      // Wait a moment for the update to propagate, then verify by fetching
-      await new Promise(resolve => setTimeout(resolve, 150))
-
-      const { data: verifyRoom, error: verifyError } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('id', room.id)
-        .single()
-
-      if (verifyError || !verifyRoom) {
-        console.error('Failed to verify room update:', verifyError)
-      }
-
       toast.success('Joined room successfully!')
-      navigate(`/game/${room.id}`)
+      navigate(`/waiting/${room.id}`)
     } catch (error) {
       console.error('Error joining room:', error)
       toast.error('Failed to join room')

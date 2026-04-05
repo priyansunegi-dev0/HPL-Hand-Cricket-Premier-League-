@@ -85,9 +85,9 @@ export function CreateRoomPage() {
 
       setRoomCode(code)
 
-      // Navigate directly to game instead of waiting room
+      // Navigate to the waiting lobby instead of starting the game automatically
       setTimeout(() => {
-        navigate(`/game/${room.id}`)
+        navigate(`/waiting/${room.id}`)
       }, 150)
     } catch (error) {
       console.error('Error creating room:', error)
